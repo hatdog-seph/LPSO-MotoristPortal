@@ -7,22 +7,14 @@ const CitationContext = createContext(null);
 const FALLBACK_LOCK_MESSAGE =
   'Your 7 days time line is out of date the acc is locked and terminated to setteled your payment go to the lpso office to pay';
 
-// supabase-js (functions-js) THROWS for any non-2xx response before ever
-// touching `data` - it always comes back as `{ data: null, error }`, even
-// though our edge function sent a perfectly good JSON body like
-// { error: "locked", message: "..." }. That body only exists on
-// `error.context`, which is the raw Response object, and has to be
-// re-read with its own .json() call. Without this, `data` is always null
-// on a 401/423 and we can never tell "locked" apart from "wrong password"
-// or any other failure - which is exactly the bug that made the account
-// lock always show the generic invalid-credentials message.
+
 async function readFunctionErrorBody(fnError) {
   try {
     if (fnError?.context && typeof fnError.context.json === 'function') {
       return await fnError.context.json();
     }
   } catch {
-    // context body already consumed, not JSON, etc. - fall through.
+    
   }
   return null;
 }
