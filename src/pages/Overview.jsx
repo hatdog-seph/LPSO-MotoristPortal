@@ -11,7 +11,7 @@ export default function Overview({ setPage, setShowPay }) {
     <>
       <PageHead
         eyebrow="MOTORIST DASHBOARD"
-        title={`Hello, ${citation.motorist.split(' ')[0]}.`}
+        title={`Hello, ${citation.motorist}.`}
         desc="Here’s the current status of your traffic citation."
       >
         <StatusBadge status={citation.status} />
@@ -77,7 +77,7 @@ export default function Overview({ setPage, setShowPay }) {
           <button className="secondary" onClick={() => setPage('citation')}>
             Review full citation <ArrowRight size={17} />
           </button>
-          <button className="primary" onClick={() => setShowPay(true)}>
+          <button className="primary" onClick={() => setPage('payment')}>
             Pay citation <CreditCard size={17} />
           </button>
         </div>
