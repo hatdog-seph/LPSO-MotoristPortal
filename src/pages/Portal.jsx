@@ -4,11 +4,7 @@ import { Bell, CheckCircle2, CircleHelp, Clock3, FileText, Gavel, Home, LogOut, 
 import lpsoLogo from '../data/images/lpso_logo.png';
 import { useCitation } from '../context/CitationContext';
 
-// Remembers which notification the motorist has already seen (by an id
-// derived from their ticket + citation status), so the unread dot doesn't
-// keep showing after they've opened it - but a NEW notification (e.g. the
-// status actually changing from pending to Settled) still lights it up
-// again, since that produces a different id.
+
 const NOTIF_SEEN_KEY = 'motoristNotifSeen';
 import NavItem from '../components/NavItem';
 import PaymentModal from '../components/PaymentModal';
@@ -33,9 +29,7 @@ export default function Portal() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [seenNotifId, setSeenNotifId] = useState(() => localStorage.getItem(NOTIF_SEEN_KEY));
 
-  // A single, real notification derived straight from the citation's own
-  // status - not a separate feed to keep in sync. Its id changes whenever
-  // the status actually changes, which is what drives the unread dot.
+  
   const notification = useMemo(() => {
     if (!citation) return null;
     if (citation.status === 'Settled') {
@@ -64,24 +58,14 @@ export default function Portal() {
     }
   };
 
-  // Sync from the citation's actual persisted status (set only by the
-  // PayMongo webhook) once it loads - covers a page refresh, where the
-  // in-memory `submitted` flag above would otherwise reset to null even
-  // though the citation is already Settled.
+ 
   useEffect(() => {
     if (citation?.status === 'Settled') {
       setSubmitted((prev) => (prev === null ? 'paid' : prev));
     }
   }, [citation?.status]);
 
-  // Make the phone/browser back button behave the way a motorist expects:
-  // from any internal page (My Citation, Payment, etc.) it should land on
-  // Overview, not exit the app or step through some longer stack. We push
-  // exactly ONE history entry the moment we leave Overview, and every other
-  // internal move (citation <-> payment <-> violations, etc.) just replaces
-  // the current page without adding more entries. So there's ever only one
-  // extra "back stop" sitting in history, and popping it always means
-  // "return to Overview."
+
   useEffect(() => {
     const onPopState = () => {
       setPage('overview');
@@ -91,16 +75,12 @@ export default function Portal() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  // Every internal navigation - sidebar clicks, "Review full citation",
-  // "Proceed to payment," etc. - should go through here instead of calling
-  // setPage directly, so it stays in sync with the history entry above.
+ 
   const navigateTo = (p) => {
     setMenu(false);
     if (p === pageRef.current) return;
     if (p === 'overview') {
-      // Consume the pushed entry via a real back navigation (rather than
-      // just setPage) so the history stack and the on-screen page never
-      // drift out of sync with each other.
+    
       window.history.back();
     } else {
       if (pageRef.current === 'overview') {
@@ -123,8 +103,6 @@ export default function Portal() {
 
   const logout = () => {
     endSession();
-    // replace here too, for the same reason as the sign-in navigate: don't
-    // leave a stale, now-logged-out /portal entry sitting in history.
     nav('/login', { replace: true });
   };
 
