@@ -1,7 +1,4 @@
-// POST { token }
-// -> { citation } if the token is valid and unexpired
-// -> 401 { error } otherwise (portal should clear the stored token and
-//    send the motorist back to the login screen)
+// re-validates a motorist's stored session token and returns the citation, or 401 so the portal sends them back to login
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import {
   buildCitationBundle,
@@ -48,10 +45,7 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-  // The lock is checked here too, on every session refresh, so it takes
-  // effect for an already-issued token the moment the 7-day window from
-  // citation.received_at closes - it doesn't wait for the token's own
-  // (longer or independently-timed) exp to be reached.
+  // checked again on every session refresh so the lock takes effect the moment the 7-day window closes, not just when the token itself expires
   if (await isCitationLocked(supabase, payload.cid)) {
     return new Response(JSON.stringify({ error: "locked", message: LOCK_MESSAGE }), {
       status: 423,

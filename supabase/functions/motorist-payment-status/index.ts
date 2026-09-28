@@ -1,12 +1,4 @@
-// =============================================================================
-// motorist-payment-status
-// -----------------------------------------------------------------------------
-// The motorist portal polls this function every few seconds while a QR Ph
-// payment is "pending" (see PaymentModal.jsx), so the page can update itself
-// automatically once the payment goes through - without the motorist having
-// to refresh manually. It only reads our OWN `payment` table (already kept
-// up to date by paymongo-webhook); it never calls PayMongo directly.
-// =============================================================================
+// polled every few seconds by the portal while a QR Ph payment is pending, so the page updates itself once paid - just reads our own payment table, never calls PayMongo directly
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders, verifyToken } from "./_shared/motorist.ts";

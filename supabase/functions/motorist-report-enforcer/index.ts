@@ -1,12 +1,4 @@
-// =============================================================================
-// motorist-report-enforcer
-// -----------------------------------------------------------------------------
-// Not payment-related - lets a motorist file a complaint/report about the
-// enforcer who issued their citation (e.g. unprofessional behavior, an
-// incorrect citation detail). Saved to the `enforcer_report` table for
-// admin review. Included here for completeness of the motorist-facing
-// Edge Functions, alongside the payment-flow ones above.
-// =============================================================================
+// lets a logged-in motorist file a complaint about the enforcer who issued their citation, saved to enforcer_report for admin review
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders, verifyToken } from "./_shared/motorist.ts";

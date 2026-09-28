@@ -1,20 +1,13 @@
-// Shared helpers for the motorist-login and motorist-session edge
-// functions. Kept in one place so the token format and the shape of
-// the citation bundle sent to the portal can never drift between the
-// two functions.
+// shared helpers so motorist-login and motorist-session never drift on token format or citation shape
 
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
-// Independent of the token's own TTL above: this is the real account-level
-// access window the motorist portal enforces, counted from the moment the
-// citation actually synced to the database (citation.received_at), not from
-// login time. Once it closes, the account is locked for login - and any
-// still-valid token is rejected too - whether or not the citation is paid.
-const LOCK_WINDOW_SECONDS = 60 * 60 * 24 * 7; // 7 days
+const LOCK_WINDOW_SECONDS = 60 * 60 * 24 * 7; // real account lock window, counted from citation.received_at, not login time
 
 export const LOCK_MESSAGE =
   "Your 7 days time line is out of date the acc is locked and terminated to setteled your payment go to the lpso office to pay";
 
+// checks whether the 7-day account lock window (from citation.received_at) has closed
 export function isPastLockWindow(receivedAt: string | null | undefined): boolean {
   if (!receivedAt) return false;
   const receivedMs = new Date(receivedAt).getTime();
@@ -22,11 +15,7 @@ export function isPastLockWindow(receivedAt: string | null | undefined): boolean
   return Date.now() > receivedMs + LOCK_WINDOW_SECONDS * 1000;
 }
 
-/// Looks up just the citation's received_at and reports whether the 7-day
-/// account access window (from sync time, not login time) has closed.
-/// Used by both motorist-login (to block a fresh login) and
-/// motorist-session (to kill an already-issued token) so the two can never
-/// drift out of sync on what "locked" means.
+/// checks whether this citation's account access window has expired
 export async function isCitationLocked(supabase: any, citationId: string): Promise<boolean> {
   const { data } = await supabase
     .from("citation")
@@ -36,11 +25,13 @@ export async function isCitationLocked(supabase: any, citationId: string): Promi
   return isPastLockWindow(data?.received_at ?? null);
 }
 
+// encodes bytes as base64url (URL-safe base64, no padding)
 function base64UrlEncode(bytes: Uint8Array): string {
   let str = btoa(String.fromCharCode(...bytes));
   return str.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+// decodes a base64url string back into bytes
 function base64UrlDecode(str: string): Uint8Array {
   str = str.replace(/-/g, "+").replace(/_/g, "/");
   while (str.length % 4) str += "=";
@@ -48,6 +39,7 @@ function base64UrlDecode(str: string): Uint8Array {
   return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 }
 
+// imports a secret as an HMAC-SHA256 signing/verifying key
 async function hmacKey(secret: string) {
   return crypto.subtle.importKey(
     "raw",
@@ -64,6 +56,7 @@ export interface MotoristTokenPayload {
   exp: number; // unix seconds
 }
 
+/// signs a citation id + ticket number into a token that expires after 7 days
 export async function signToken(
   payload: Omit<MotoristTokenPayload, "exp">,
   secret: string,
@@ -81,6 +74,7 @@ export async function signToken(
   return `${body}.${sig}`;
 }
 
+/// verifies a token's signature and expiry, returning its payload if still valid
 export async function verifyToken(
   token: string,
   secret: string,
@@ -111,11 +105,7 @@ export async function verifyToken(
   }
 }
 
-/// Citations are recorded in one of two name orders:
-///   "SURNAME, First Middle"  (comma present - surname is the part before it)
-///   "First Middle Last"      (no comma - surname is the last word)
-/// e.g. "ILAGAN, TOPEPE" -> "ilagan", "ABIG, JOMAR DOLAMOS" -> "abig",
-/// "Juan Dela Cruz" -> "cruz" (no comma, so last word).
+/// extracts the surname from a full name, handling both "SURNAME, First" and "First Last" formats
 export function surnameFromFullName(fullName: string): string {
   const trimmed = fullName.trim();
   if (trimmed.includes(",")) {
@@ -127,13 +117,13 @@ export function surnameFromFullName(fullName: string): string {
   return last.replace(/[^a-zA-Z]/g, "").toLowerCase();
 }
 
-/// Expected motorist portal password: last 4 letters of the surname
-/// (or the whole surname if it's shorter than 4 letters).
+/// motorist portal password = last 4 letters of the surname (or the whole surname if shorter)
 export function expectedPassword(fullName: string): string {
   const surname = surnameFromFullName(fullName);
   return surname.length <= 4 ? surname : surname.slice(-4);
 }
 
+// builds the CORS headers every function returns so the portal's browser requests aren't blocked
 export function corsHeaders(origin: string | null) {
   return {
     "Access-Control-Allow-Origin": origin ?? "*",
@@ -155,10 +145,7 @@ export interface CitationBundle {
   violations: { code: string; title: string; fine: number }[];
 }
 
-/// Fetches a citation and everything it references (motorist, vehicle,
-/// location, enforcer, violations) and shapes it into exactly what the
-/// motorist portal's UI expects (see src/data/citation.js for the
-/// original mock shape this replaces).
+/// fetches a citation plus everything it references (motorist, vehicle, location, enforcer, violations) and shapes it into what the portal UI expects
 export async function buildCitationBundle(
   supabase: any,
   citationId: string,

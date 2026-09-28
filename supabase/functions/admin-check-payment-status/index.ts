@@ -1,18 +1,4 @@
-// =============================================================================
-// admin-check-payment-status
-// -----------------------------------------------------------------------------
-// Admin-only "refresh"/manual-verify button on the Payment Verification
-// page: re-checks a QR Ph payment's REAL status directly against PayMongo's
-// API (never trusts a frontend claim). This exists for cases where the
-// webhook hasn't landed yet (e.g. it was slow, or briefly disabled) - the
-// admin can force a re-check instead of waiting.
-//
-// verify_jwt is true for this function, so the caller must present a valid
-// Supabase Auth session (i.e. a logged-in admin), and the `payment` table's
-// own Row Level Security additionally restricts writes to the
-// `authenticated` role - so an unauthenticated motorist could never call
-// this even if they discovered the URL.
-// =============================================================================
+// admin-only "refresh" button: re-checks a QR Ph payment's real status against PayMongo directly, for when the webhook hasn't landed yet (requires a logged-in admin session)
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -39,9 +25,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: { ...headers, "Content-Type": "application/json" } });
   }
 
-  // verify_jwt already rejected any request without a valid Supabase
-  // session before this code runs, so req.headers carries a verified
-  // admin's Authorization header at this point.
+  // verify_jwt already rejected any unauthenticated request before this code runs
 
   let body: { payment_id?: string };
   try {
@@ -83,8 +67,7 @@ Deno.serve(async (req) => {
     if (pgStatus === "succeeded") nextStatus = "paid";
     else if (pgStatus === "awaiting_payment_method") nextStatus = "failed";
 
-    // Idempotent: only write if the status actually changed, and never
-    // downgrade a payment that a webhook already marked paid/failed.
+    // idempotent: only writes on an actual change, never downgrades a payment the webhook already resolved
     if (nextStatus && payment.status === "pending" && nextStatus !== payment.status) {
       await supabase
         .from("payment")

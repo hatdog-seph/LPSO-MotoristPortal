@@ -1,27 +1,4 @@
-// =============================================================================
-// paymongo-webhook
-// -----------------------------------------------------------------------------
-// This is where PayMongo tells us that a payment actually went through (or
-// failed). Unlike motorist-create-payment (which only STARTS a payment and
-// hands back a QR code), this function is called automatically BY PAYMONGO
-// itself, in the background, the moment the motorist finishes scanning and
-// paying with GCash/Maya/etc. The motorist and the frontend never call this
-// endpoint directly - PayMongo's servers do.
-//
-// Flow:
-//   1. PayMongo sends a POST request here with an event payload and a
-//      "Paymongo-Signature" header.
-//   2. We verify that signature using HMAC-SHA256 and our webhook secret,
-//      to make sure the request really came from PayMongo and wasn't
-//      faked by someone else pretending a payment succeeded.
-//   3. If the event is "payment.paid", we mark our local `payment` row as
-//      paid and flip the citation's status to "Settled".
-//   4. If it's "payment.failed", we mark the payment row as failed.
-//   5. We always return HTTP 200 for any correctly-signed request PayMongo
-//      sends, even if we don't recognize the event type - PayMongo expects
-//      200 for anything it successfully delivered, and will retry (and
-//      eventually disable the webhook) if it keeps getting 4xx/5xx back.
-// =============================================================================
+// called automatically BY PayMongo (never by the frontend) when a payment succeeds/fails: verifies the HMAC signature, then marks the payment row paid/failed and settles the citation
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -29,10 +6,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const WEBHOOK_SECRET = Deno.env.get("PAYMONGO_WEBHOOK_SECRET")!;
 
-// Computes an HMAC-SHA256 signature over `message` using our webhook
-// secret as the key, formatted as a lowercase hex string - this is the
-// exact same algorithm PayMongo uses on their end, so if our secret
-// matches theirs, our computed signature should match what they sent us.
+// computes an HMAC-SHA256 signature (lowercase hex) the same way PayMongo does, so ours can be compared against theirs
 async function hmacHex(key: string, message: string): Promise<string> {
   const cryptoKey = await crypto.subtle.importKey(
     "raw",
@@ -45,10 +19,7 @@ async function hmacHex(key: string, message: string): Promise<string> {
   return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-// Compares two strings without leaking timing information about where
-// they first differ (a normal `===` comparison can be exploited to guess
-// a secret one character at a time by measuring response time - this
-// avoids that by always comparing every character before returning).
+// compares two strings without leaking timing info about where they first differ (unlike a plain === check)
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let result = 0;
@@ -58,9 +29,7 @@ function timingSafeEqual(a: string, b: string): boolean {
   return result === 0;
 }
 
-// PayMongo's webhook payload shape varies slightly depending on the event
-// type, so the payment intent ID can show up in a few different places.
-// This checks each possible location and returns the first one found.
+// the payment intent ID lands in a different spot depending on event type, so this checks each possible location
 function extractPaymentIntentId(resourceData: any): string | null {
   return (
     resourceData?.attributes?.payment_intent_id ||
@@ -77,9 +46,7 @@ Deno.serve(async (req) => {
     return new Response("Method not allowed", { status: 405 });
   }
 
-  // The "Paymongo-Signature" header looks like: "t=<timestamp>,te=<test
-  // signature>,li=<live signature>" - we parse it into a simple key/value
-  // map below.
+  // parses the "Paymongo-Signature" header ("t=<timestamp>,te=<test sig>,li=<live sig>") into a key/value map
   const signatureHeader = req.headers.get("Paymongo-Signature");
   const rawBody = await req.text();
 
@@ -99,11 +66,7 @@ Deno.serve(async (req) => {
     return new Response("Malformed signature header", { status: 400 });
   }
 
-  // Re-compute the expected signature ourselves from the timestamp + raw
-  // body, and check it against whichever signature(s) PayMongo sent
-  // (test-mode "te" and/or live-mode "li"). If neither matches, someone
-  // is either not actually PayMongo, or our PAYMONGO_WEBHOOK_SECRET is
-  // wrong/out of date - either way, we reject the request.
+  // recomputes the expected signature and checks it against PayMongo's test/live signature(s); rejects if neither matches
   const expectedSignature = await hmacHex(WEBHOOK_SECRET, `${timestamp}.${rawBody}`);
   const isValid = candidates.some((sig) => timingSafeEqual(expectedSignature, sig));
 
@@ -135,8 +98,7 @@ Deno.serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
   if (eventType === "payment.paid" && paymentIntentId) {
-    // Find the local payment row this event refers to, by matching the
-    // PayMongo payment intent ID we saved back in motorist-create-payment.
+    // finds the local payment row by the PayMongo intent ID saved back in motorist-create-payment
     const { data: payment } = await supabase
       .from("payment")
       .select("payment_id, citation_id, status")
@@ -146,10 +108,7 @@ Deno.serve(async (req) => {
     if (!payment) {
       console.log("[paymongo-webhook] no local payment row matches intent id", paymentIntentId);
     } else if (payment.status === "pending") {
-      // The `.eq("status", "pending")` here (in addition to the initial
-      // lookup above) guards against a race: if PayMongo retries this
-      // same webhook delivery, or two events arrive close together, only
-      // the first one actually flips the row from pending -> paid.
+      // the extra .eq("status", "pending") guards against a race - only the first of a retried/duplicate delivery flips the row
       const { data: updated } = await supabase
         .from("payment")
         .update({ status: "paid", updated_at: new Date().toISOString() })
@@ -159,8 +118,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (updated) {
-        // Payment confirmed - also settle the citation itself so it no
-        // longer shows as outstanding for the motorist or the admin.
+        // payment confirmed - also settle the citation so it stops showing as outstanding
         await supabase
           .from("citation")
           .update({ status: "Settled" })
@@ -178,9 +136,7 @@ Deno.serve(async (req) => {
       .eq("status", "pending");
   }
 
-  // Always 200 for a correctly-signed, successfully-processed request -
-  // PayMongo will keep retrying (and can eventually disable the webhook)
-  // if it sees 4xx/5xx responses here.
+  // always 200 for a correctly-signed request - PayMongo retries (and can disable the webhook) on 4xx/5xx
   return new Response(JSON.stringify({ received: true }), {
     status: 200,
     headers: { "Content-Type": "application/json" },

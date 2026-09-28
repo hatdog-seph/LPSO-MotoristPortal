@@ -1,21 +1,4 @@
-// =============================================================================
-// motorist-create-payment
-// -----------------------------------------------------------------------------
-// This is the function that CONNECTS THE PAYMENT to PayMongo (QR Ph / GCash,
-// Maya, etc). When a motorist clicks "Pay" on a citation, the frontend calls
-// this Supabase Edge Function, which then talks to PayMongo's API directly:
-//
-//   1. Create a Payment Intent on PayMongo (how much to charge, in centavos).
-//   2. Create a Payment Method of type "qrph".
-//   3. Attach the Payment Method to the Intent - PayMongo responds with a
-//      QR Ph code image the motorist can scan with any QR Ph-enabled app.
-//   4. Save a "pending" row in our own `payment` table so we can track it.
-//
-// The actual confirmation that money was received does NOT happen here -
-// that's handled separately by the `paymongo-webhook` function, which
-// PayMongo calls automatically once the motorist actually pays. This
-// function only *starts* the payment and hands back a QR code to display.
-// =============================================================================
+// starts a QR Ph payment for a citation (Payment Intent -> Payment Method -> Attach on PayMongo) and hands back the QR code; paymongo-webhook is what later confirms it was actually paid
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders, verifyToken } from "./_shared/motorist.ts";
@@ -26,19 +9,14 @@ const TOKEN_SECRET = Deno.env.get("MOTORIST_TOKEN_SECRET")!;
 const PAYMONGO_SECRET_KEY = Deno.env.get("PAYMONGO_SECRET_KEY")!;
 const PAYMONGO_PUBLIC_KEY = Deno.env.get("PAYMONGO_PUBLIC_KEY")!;
 
-// PayMongo authenticates API calls with HTTP Basic Auth, where the
-// "username" is your Secret Key or Public Key and there is no password.
+// PayMongo uses HTTP Basic Auth with the Secret/Public Key as the username and no password
 function basicAuth(key: string) {
   return "Basic " + btoa(key + ":");
 }
 
-// Creates a brand-new QR Ph payment intent + QR code for this citation.
-// This is the 3-step PayMongo dance: Payment Intent -> Payment Method ->
-// Attach. Called both on first load and whenever an old/expired QR needs
-// to be replaced with a fresh one.
+// mints a brand-new QR Ph payment intent + QR code for a citation (the 3-step PayMongo flow below)
 async function createFreshQrph(supabase: any, citation: { citation_id: string; ticket_number: string; fine_amount: number }, amountCentavos: number) {
-  // Step 1: Create the Payment Intent - tells PayMongo how much we want
-  // to charge and that we only accept the "qrph" payment method for it.
+  // Step 1: create the Payment Intent (amount + that we only accept "qrph")
   const intentRes = await fetch("https://api.paymongo.com/v1/payment_intents", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": basicAuth(PAYMONGO_SECRET_KEY) },
@@ -58,9 +36,7 @@ async function createFreshQrph(supabase: any, citation: { citation_id: string; t
   const paymentIntentId = intentJson.data.id;
   const clientKey = intentJson.data.attributes.client_key;
 
-  // Step 2: Create a Payment Method of type "qrph". This is a separate
-  // object from the Payment Intent - it represents *how* the motorist
-  // will pay (QR Ph in this case, as opposed to card, GCash direct, etc).
+  // Step 2: create a Payment Method of type "qrph" - represents how the motorist will pay
   const methodRes = await fetch("https://api.paymongo.com/v1/payment_methods", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": basicAuth(PAYMONGO_PUBLIC_KEY) },
@@ -70,9 +46,7 @@ async function createFreshQrph(supabase: any, citation: { citation_id: string; t
   if (!methodRes.ok) throw new Error(methodJson?.errors?.[0]?.detail || "Could not create payment method.");
   const paymentMethodId = methodJson.data.id;
 
-  // Step 3: Attach the Payment Method to the Payment Intent. This is the
-  // step that actually generates the QR Ph code image - PayMongo returns
-  // it inside `next_action.code.image_url` once attached successfully.
+  // Step 3: attach the Payment Method to the Intent - this is what actually generates the QR code image
   const attachRes = await fetch(`https://api.paymongo.com/v1/payment_intents/${paymentIntentId}/attach`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": basicAuth(PAYMONGO_PUBLIC_KEY) },
@@ -84,9 +58,7 @@ async function createFreshQrph(supabase: any, citation: { citation_id: string; t
   const qrImageUrl = attachJson.data?.attributes?.next_action?.code?.image_url;
   if (!qrImageUrl) throw new Error("PayMongo did not return a QR code.");
 
-  // Record this attempt in our OWN database as "pending". This row is
-  // what the paymongo-webhook function will later update to "paid" once
-  // PayMongo confirms the motorist actually completed the payment.
+  // records this attempt as "pending"; paymongo-webhook flips it to "paid" once confirmed
   await supabase.from("payment").insert({
     citation_id: citation.citation_id,
     paymongo_payment_intent_id: paymentIntentId,
@@ -141,12 +113,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Reuse an existing pending QR Ph payment for this citation instead of
-    // always minting a brand-new PayMongo payment intent + payment row.
-    // Without this, every time the motorist opens/reopens the pay screen
-    // (closes the modal, refreshes, or the page remounts) a fresh row gets
-    // inserted, leaving behind orphaned duplicate "pending" transactions
-    // that never resolve.
+    // reuses an existing pending QR Ph payment instead of minting a new one every time the pay screen reopens
     const { data: existing } = await supabase
       .from("payment")
       .select("payment_id, paymongo_payment_intent_id, status")
@@ -168,8 +135,7 @@ Deno.serve(async (req) => {
         const qrImageUrl = checkJson.data?.attributes?.next_action?.code?.image_url;
 
         if (pgStatus === "succeeded") {
-          // Already paid (webhook may just not have landed yet) - mark it here
-          // too so the frontend/admin see it immediately rather than waiting.
+          // already paid (webhook may not have landed yet) - mark it now so the UI reflects it immediately
           const { data: updated } = await supabase
             .from("payment")
             .update({ status: "paid", updated_at: new Date().toISOString() })
@@ -186,16 +152,13 @@ Deno.serve(async (req) => {
         }
 
         if (qrImageUrl && (pgStatus === "awaiting_next_action" || pgStatus === "awaiting_payment_method" || pgStatus === "processing")) {
-          // Still a live, unpaid QR - hand back the same one instead of
-          // creating a second payment intent/row for the same citation.
+          // still a live, unpaid QR - reuse it instead of creating a duplicate payment intent
           return new Response(JSON.stringify({ qr_image_url: qrImageUrl, payment_intent_id: existing.paymongo_payment_intent_id }), {
             status: 200, headers: { ...headers, "Content-Type": "application/json" },
           });
         }
 
-        // Anything else (expired/cancelled/no QR left) - close out the stale
-        // row so it doesn't linger as a duplicate "pending" transaction, then
-        // fall through to mint a fresh one below.
+        // otherwise (expired/cancelled) close out the stale row and fall through to mint a fresh one
         await supabase
           .from("payment")
           .update({ status: "failed", updated_at: new Date().toISOString() })

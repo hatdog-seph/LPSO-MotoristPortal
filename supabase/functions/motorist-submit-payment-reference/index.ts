@@ -1,13 +1,4 @@
-// =============================================================================
-// motorist-submit-payment-reference
-// -----------------------------------------------------------------------------
-// Fallback path for a payment method OTHER than QR Ph (e.g. a manual bank
-// deposit or over-the-counter payment) - the motorist types in the reference
-// number themselves. Unlike QR Ph payments, this is saved as "pending" with
-// source = "manual" and is NOT auto-verified by any webhook, since there's
-// no PayMongo transaction behind it - an admin has to manually confirm it
-// happened before the citation is considered settled.
-// =============================================================================
+// fallback for a non-QR-Ph payment (manual bank deposit, over-the-counter): saves the motorist's typed-in reference as "pending"/manual for an admin to confirm by hand
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders, verifyToken } from "./_shared/motorist.ts";

@@ -1,8 +1,4 @@
-// POST { ticket_number, password }
-// -> { token, citation } on success
-// -> 401 { error } on bad ticket number or password (deliberately the
-//    same message for both, so a wrong guess can't confirm whether a
-//    ticket number exists)
+// logs a motorist in with ticket number + password, returning a session token + citation (same generic error for both bad ticket and bad password, so a guess can't confirm a ticket number exists)
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import {
   buildCitationBundle,
@@ -73,9 +69,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Real account-level lockout: independent of paid/unpaid status, once 7
-  // days have passed since the citation actually synced to the database
-  // (received_at), the account can no longer log in at all.
+  // account-level lockout: 7 days after the citation synced (received_at), login stops working regardless of payment status
   if (await isCitationLocked(supabase, citation.citation_id)) {
     return new Response(JSON.stringify({ error: "locked", message: LOCK_MESSAGE }), {
       status: 423,
