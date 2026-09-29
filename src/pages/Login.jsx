@@ -117,7 +117,8 @@ export default function Login() {
               />
             </label>
             <div className="field-hint">
-              Password: the last 4 letters of your surname, as printed on your citation.
+              Password: the last 4 letters of your surname (or your full surname if it's
+              shorter than 4 letters), as printed on your citation.
             </div>
             {error && (
               <div className="form-error">
