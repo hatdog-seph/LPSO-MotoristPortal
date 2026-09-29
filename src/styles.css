@@ -1249,13 +1249,16 @@ select:focus {
 }
 
 .modal-amount {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   background: #f5f7fa;
   border-radius: 11px;
   padding: 14px;
   margin: 22px 0;
+}
+
+.modal-amount-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .modal-amount span {
@@ -1266,6 +1269,15 @@ select:focus {
 .modal-amount strong {
   font-size: 20px;
   color: var(--navy);
+}
+
+.modal-amount-desc {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid #e3e8ef;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink, #14213d);
 }
 
 .fake-qr {
