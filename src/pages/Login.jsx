@@ -119,7 +119,7 @@ export default function Login() {
             <div className="field-hint" style={{ fontStyle: "italic" }}>
               Password: the last 4 letters of your surname (or your full surname if it's
               shorter than 4 letters) + the last 4 characters of your ticket
-              number - both are printed on your citation.
+              number.
             </div>
             {error && (
               <div className="form-error">
