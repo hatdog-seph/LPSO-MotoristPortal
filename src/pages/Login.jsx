@@ -116,6 +116,9 @@ export default function Login() {
                 placeholder="Enter your portal password"
               />
             </label>
+            <div className="field-hint">
+              Password: the last 4 letters of your surname, as printed on your citation.
+            </div>
             {error && (
               <div className="form-error">
                 <AlertCircle size={16} />
