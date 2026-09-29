@@ -2,11 +2,7 @@ import { ShieldAlert } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCitation } from '../context/CitationContext';
 
-// Full-screen popup for the real account-level 7-day lockout. Shown the
-// moment the server reports the account is locked - whether that happens
-// from a login attempt or from an existing session getting kicked out on
-// its next check - so the motorist always sees this exact message rather
-// than a generic error or a silent redirect.
+
 export default function LockedModal() {
   const { lockedMessage, dismissLocked } = useCitation();
   const nav = useNavigate();
