@@ -118,7 +118,8 @@ export default function Login() {
             </label>
             <div className="field-hint">
               Password: the last 4 letters of your surname (or your full surname if it's
-              shorter than 4 letters), as printed on your citation.
+              shorter than 4 letters) followed by the last 4 characters of your ticket
+              number - both are printed on your citation.
             </div>
             {error && (
               <div className="form-error">

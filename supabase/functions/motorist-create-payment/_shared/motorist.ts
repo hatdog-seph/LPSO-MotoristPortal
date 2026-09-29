@@ -117,10 +117,12 @@ export function surnameFromFullName(fullName: string): string {
   return last.replace(/[^a-zA-Z]/g, "").toLowerCase();
 }
 
-/// motorist portal password = last 4 letters of the surname (or the whole surname if shorter)
-export function expectedPassword(fullName: string): string {
+/// motorist portal password = last 4 letters of the surname (or the whole surname if shorter) + last 4 characters of the ticket number
+export function expectedPassword(fullName: string, ticketNumber: string): string {
   const surname = surnameFromFullName(fullName);
-  return surname.length <= 4 ? surname : surname.slice(-4);
+  const surnamePart = surname.length <= 4 ? surname : surname.slice(-4);
+  const ticketPart = (ticketNumber || "").replace(/[^a-zA-Z0-9]/g, "").slice(-4).toLowerCase();
+  return `${surnamePart}${ticketPart}`;
 }
 
 // builds the CORS headers every function returns so the portal's browser requests aren't blocked

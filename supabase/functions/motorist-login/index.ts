@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  const expected = expectedPassword(citation.motorist_full_name);
+  const expected = expectedPassword(citation.motorist_full_name, citation.ticket_number);
   if (!expected || password !== expected) {
     return new Response(JSON.stringify({ error: GENERIC_ERROR }), {
       status: 401,
