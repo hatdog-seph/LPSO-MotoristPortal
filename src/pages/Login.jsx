@@ -113,7 +113,7 @@ export default function Login() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your portal password"
+                placeholder="Enter Password (e.g. cruz0001)"
               />
             </label>
             <div className="field-hint" style={{ fontStyle: "italic" }}>
